@@ -67,7 +67,7 @@ class YOLOImageSimilaritySorter:
         # รูปภาพที่เหมือนกัน
         self.similar_images = []
         self.unselected_images = set()  # เก็บรูปที่กด "unselect"
-        self.threshold = 0.3  # ค่าความคล้าย (0-1)
+        self.threshold = 0.8  # ค่าความคล้าย (0-1)
         
         # Target classes in ImageNet related to vehicles and people
         self.target_class_keywords = [
@@ -636,7 +636,7 @@ class YOLOImageSimilaritySorter:
                 return
 
             # เริ่มหารูปที่คล้ายกันแบบ sliding window
-            window_size = 20
+            window_size = 200
             start_index = ref_index + 1  # เริ่มจากรูปถัดไป
             
             while start_index < len(self.image_files):
