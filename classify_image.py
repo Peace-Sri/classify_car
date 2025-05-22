@@ -68,6 +68,9 @@ class YOLOImageSimilaritySorter:
         self.model = None
         self.is_running = False
         
+        # เพิ่มตัวแปรโหมด
+        self.mode = "normal"  # "normal" หรือ "not_car_auto"
+        
         # รูปภาพที่เหมือนกัน
         self.similar_images = []
         self.unselected_images = set()  # เก็บรูปที่กด "unselect"
@@ -102,7 +105,8 @@ class YOLOImageSimilaritySorter:
             'car': 0,
             'not_car': 0,
             'auto_not_car': 0,
-            'similar_moved': 0
+            'similar_moved': 0,
+            'skipped': 0  # เพิ่มสถิติรูปที่ skip
         }
         
         # Setup UI
@@ -231,8 +235,8 @@ class YOLOImageSimilaritySorter:
         
         # App title
         header_label = ttk.Label(header_frame, 
-                                 text="YOLOv8 Image Similarity Sorter", 
-                                 style='Header.TLabel')
+                                text="YOLOv8 Image Similarity Sorter", 
+                                style='Header.TLabel')
         header_label.pack(side=tk.LEFT, padx=(0, self.style.PADDING))
         
         # =========== Folder selection section ===========
@@ -250,7 +254,7 @@ class YOLOImageSimilaritySorter:
         
         # Browse folder button
         browse_button = ttk.Button(folder_frame, text="เลือกโฟลเดอร์", 
-                                  command=self.select_folder, style='Accent.TButton')
+                                command=self.select_folder, style='Accent.TButton')
         browse_button.pack(side=tk.LEFT)
         
         # =========== Similarity Threshold section ===========
@@ -270,12 +274,12 @@ class YOLOImageSimilaritySorter:
         
         # ปุ่มลด threshold
         decrease_btn = ttk.Button(threshold_frame, text="-", width=2, 
-                                 command=self.decrease_threshold)
+                                command=self.decrease_threshold)
         decrease_btn.pack(side=tk.LEFT, padx=(0, 5))
         
         # ปุ่มเพิ่ม threshold
         increase_btn = ttk.Button(threshold_frame, text="+", width=2, 
-                                 command=self.increase_threshold)
+                                command=self.increase_threshold)
         increase_btn.pack(side=tk.LEFT, padx=(0, 10))
         
         # Scale for threshold
@@ -303,6 +307,7 @@ class YOLOImageSimilaritySorter:
         self.car_var = tk.StringVar(value="Car: 0")
         self.not_car_var = tk.StringVar(value="Not Car (ผู้ใช้): 0")
         self.auto_not_car_var = tk.StringVar(value="Not Car (อัตโนมัติ): 0")
+        self.skipped_var = tk.StringVar(value="ข้าม: 0")  # เพิ่มตัวแปรสถิติ skip
         self.similar_moved_var = tk.StringVar(value="รูปที่คล้ายที่ย้ายแล้ว: 0")
         
         # Display statistics in a grid layout
@@ -316,7 +321,13 @@ class YOLOImageSimilaritySorter:
         ttk.Label(stats_row2, textvariable=self.car_var, style='Stats.TLabel').pack(side=tk.LEFT, expand=True, fill=tk.X, padx=1)
         ttk.Label(stats_row2, textvariable=self.not_car_var, style='Stats.TLabel').pack(side=tk.LEFT, expand=True, fill=tk.X, padx=1)
         ttk.Label(stats_row2, textvariable=self.auto_not_car_var, style='Stats.TLabel').pack(side=tk.LEFT, expand=True, fill=tk.X, padx=1)
-        ttk.Label(stats_row2, textvariable=self.similar_moved_var, style='Stats.TLabel').pack(side=tk.LEFT, expand=True, fill=tk.X, padx=1)
+        
+        # Third statistics row
+        stats_row3 = ttk.Frame(stats_frame, style='TFrame')
+        stats_row3.pack(fill=tk.X, pady=(1, 0))
+        
+        ttk.Label(stats_row3, textvariable=self.skipped_var, style='Stats.TLabel').pack(side=tk.LEFT, expand=True, fill=tk.X, padx=1)
+        ttk.Label(stats_row3, textvariable=self.similar_moved_var, style='Stats.TLabel').pack(side=tk.LEFT, expand=True, fill=tk.X, padx=1)
         
         # =========== Progress bar ===========
         progress_frame = ttk.Frame(main_frame, style='TFrame')
@@ -330,13 +341,25 @@ class YOLOImageSimilaritySorter:
         control_frame = ttk.Frame(main_frame, style='TFrame')
         control_frame.pack(fill=tk.X, pady=(0, self.style.PADDING))
         
+        # ปุ่มเริ่มคัดแยกแบบปกติ
         self.start_button = ttk.Button(control_frame, text="เริ่มคัดแยก", 
-                                       command=self.start_sorting, state=tk.DISABLED, style='Accent.TButton')
+                                    command=self.start_normal_sorting, state=tk.DISABLED, style='Accent.TButton')
         self.start_button.pack(side=tk.LEFT, padx=(0, 5))
         
+        # ปุ่มเริ่มโหมด Not Car Auto
+        self.not_car_auto_button = ttk.Button(control_frame, text="Not Car Auto", 
+                                            command=self.start_not_car_auto_sorting, state=tk.DISABLED, style='Car.TButton')
+        self.not_car_auto_button.pack(side=tk.LEFT, padx=(0, 5))
+        
+        # ปุ่มหยุด
         self.stop_button = ttk.Button(control_frame, text="หยุด", 
-                                      command=self.stop_sorting, state=tk.DISABLED)
+                                    command=self.stop_sorting, state=tk.DISABLED)
         self.stop_button.pack(side=tk.LEFT)
+        
+        # แสดงโหมดปัจจุบัน
+        self.mode_var = tk.StringVar(value="โหมด: ปกติ")
+        mode_label = ttk.Label(control_frame, textvariable=self.mode_var, style='TLabel')
+        mode_label.pack(side=tk.RIGHT, padx=(10, 0))
         
         # =========== Log display section ===========
         log_frame = ttk.Frame(main_frame, style='Card.TFrame')
@@ -348,8 +371,8 @@ class YOLOImageSimilaritySorter:
         
         # Text box for displaying logs
         self.log_text = tk.Text(log_frame, height=10, wrap=tk.WORD, bg=self.style.LOG_BG, 
-                               fg=self.style.TEXT_COLOR, insertbackground=self.style.TEXT_COLOR,
-                               padx=5, pady=5, relief=tk.FLAT)
+                            fg=self.style.TEXT_COLOR, insertbackground=self.style.TEXT_COLOR,
+                            padx=5, pady=5, relief=tk.FLAT)
         self.log_text.pack(fill=tk.BOTH, expand=True, padx=self.style.PADDING, pady=self.style.PADDING)
         
         # Add scrollbar for log
@@ -366,6 +389,20 @@ class YOLOImageSimilaritySorter:
         # Welcome message
         self.log("YOLOv8 Image Similarity Sorter started", "info")
         self.log("กรุณาเลือกโฟลเดอร์รูปภาพเพื่อเริ่มต้น")
+
+    def start_normal_sorting(self):
+        """เริ่มการคัดแยกแบบปกติ"""
+        self.mode = "normal"
+        self.mode_var.set("โหมด: ปกติ")
+        self.log("เริ่มโหมดปกติ", "info")
+        self.start_sorting()
+
+    def start_not_car_auto_sorting(self):
+        """เริ่มการคัดแยกแบบ Not Car Auto"""
+        self.mode = "not_car_auto"
+        self.mode_var.set("โหมด: Not Car Auto")
+        self.log("เริ่มโหมด Not Car Auto", "success")
+        self.start_sorting()
     
     def decrease_threshold(self):
         """ลดค่า threshold ลง 0.05"""
@@ -392,7 +429,9 @@ class YOLOImageSimilaritySorter:
         if folder_path:
             self.folder_path = folder_path
             self.folder_var.set(folder_path)
+            # เปิดใช้งานปุ่มทั้งสอง
             self.start_button.config(state=tk.NORMAL)
+            self.not_car_auto_button.config(state=tk.NORMAL)
             self.log(f"เลือกโฟลเดอร์: {folder_path}", "info")
             
     def log(self, message, level="normal"):
@@ -427,6 +466,7 @@ class YOLOImageSimilaritySorter:
         self.car_var.set(f"Car: {self.stats['car']}")
         self.not_car_var.set(f"Not Car (ผู้ใช้): {self.stats['not_car']}")
         self.auto_not_car_var.set(f"Not Car (อัตโนมัติ): {self.stats['auto_not_car']}")
+        self.skipped_var.set(f"ข้าม: {self.stats['skipped']}")
         self.similar_moved_var.set(f"รูปที่คล้ายที่ย้ายแล้ว: {self.stats['similar_moved']}")
         
         # Update progress bar
@@ -452,8 +492,9 @@ class YOLOImageSimilaritySorter:
         for folder in self.target_folders.values():
             os.makedirs(folder, exist_ok=True)
         
-        # Lock start button to prevent multiple starts
+        # Lock both start buttons to prevent multiple starts
         self.start_button.config(state=tk.DISABLED)
+        self.not_car_auto_button.config(state=tk.DISABLED)
         self.stop_button.config(state=tk.NORMAL)
             
         # Start processing in a separate thread
@@ -464,13 +505,14 @@ class YOLOImageSimilaritySorter:
         # Load YOLOv8 model
         try:
             self.log("กำลังโหลดโมเดล YOLOv8...", "info")
-            self.model = YOLO('best-cls-v2.pt', ).to(device)
+            self.model = YOLO('best-cls-v2.pt', ).to(0)
             self.log("โหลดโมเดลสำเร็จ", "success")
         except Exception as e:
             self.log(f"ข้อผิดพลาดในการโหลดโมเดล: {e}", "error")
             messagebox.showerror("ข้อผิดพลาด", f"ไม่สามารถโหลดโมเดลได้: {e}")
             self.is_running = False
             self.root.after(0, lambda: self.start_button.config(state=tk.NORMAL))
+            self.root.after(0, lambda: self.not_car_auto_button.config(state=tk.NORMAL))
             self.root.after(0, lambda: self.stop_button.config(state=tk.DISABLED))
             return
             
@@ -482,17 +524,19 @@ class YOLOImageSimilaritySorter:
             messagebox.showinfo("ข้อมูล", "ไม่พบไฟล์ภาพในโฟลเดอร์ที่เลือก")
             self.is_running = False
             self.root.after(0, lambda: self.start_button.config(state=tk.NORMAL))
+            self.root.after(0, lambda: self.not_car_auto_button.config(state=tk.NORMAL))
             self.root.after(0, lambda: self.stop_button.config(state=tk.DISABLED))
             return
             
-        # Update statistics
+        # Update statistics - เพิ่ม 'skipped' ในนี้ด้วย
         self.stats = {
             'total': len(self.image_files),
             'processed': 0,
             'car': 0,
             'not_car': 0,
             'auto_not_car': 0,
-            'similar_moved': 0
+            'similar_moved': 0,
+            'skipped': 0  # เพิ่มบรรทัดนี้
         }
         self.root.after(0, self.update_stats)
         
@@ -543,31 +587,62 @@ class YOLOImageSimilaritySorter:
             
             self.log(f"  คลาสที่ทำนาย: {class_name}, ความมั่นใจ: {confidence:.4f}")
             
-            if is_target_class:
-                # If it's a target class, find similar images
-                self.log(f"  กำลังค้นหารูปที่คล้ายกัน...", "info")
-                
-                # Reset similar images and unselected set
-                self.similar_images = []
-                self.unselected_images = set()
-                
-                # Find similar images in a separate thread
-                self.root.after(0, lambda: self.find_similar_images(img_path, class_name, confidence))
-            else:
-                # If not a target class, move to not_car folder automatically
-                target_path = os.path.join(self.target_folders['not_car'], filename)
-                shutil.move(img_path, target_path)
-                self.log(f"  ย้ายไปยังโฟลเดอร์ not_car โดยอัตโนมัติ", "info")
-                
-                # Update statistics
-                self.stats['processed'] += 1
-                self.stats['auto_not_car'] += 1
-                self.root.after(0, self.update_stats)
-                
-                # Process next image
-                self.current_index += 1
-                self.root.after(100, self.process_next_image)
-                
+            if self.mode == "normal":
+                # โหมดปกติ
+                if is_target_class:
+                    # If it's a target class, find similar images
+                    self.log(f"  กำลังค้นหารูปที่คล้ายกัน...", "info")
+                    
+                    # Reset similar images and unselected set
+                    self.similar_images = []
+                    self.unselected_images = set()
+                    
+                    # Find similar images in a separate thread
+                    self.root.after(0, lambda: self.find_similar_images(img_path, class_name, confidence))
+                else:
+                    # If not a target class, move to not_car folder automatically
+                    target_path = os.path.join(self.target_folders['not_car'], filename)
+                    shutil.move(img_path, target_path)
+                    self.log(f"  ย้ายไปยังโฟลเดอร์ not_car โดยอัตโนมัติ", "info")
+                    
+                    # Update statistics
+                    self.stats['processed'] += 1
+                    self.stats['auto_not_car'] += 1
+                    self.root.after(0, self.update_stats)
+                    
+                    # Process next image
+                    self.current_index += 1
+                    self.root.after(100, self.process_next_image)
+                    
+            elif self.mode == "not_car_auto":
+                # โหมด Not Car Auto
+                if is_target_class:
+                    # ถ้าเจอรถ → Skip ไปเลย
+                    self.log(f"  โหมด Not Car Auto: เจอรถ → Skip", "warning")
+                    
+                    # Update statistics
+                    self.stats['processed'] += 1
+                    self.stats['skipped'] += 1
+                    self.root.after(0, self.update_stats)
+                    
+                    # Process next image
+                    self.current_index += 1
+                    self.root.after(100, self.process_next_image)
+                else:
+                    # ถ้าไม่เจอรถ → ย้ายไป not_car ทันที
+                    target_path = os.path.join(self.target_folders['not_car'], filename)
+                    shutil.move(img_path, target_path)
+                    self.log(f"  โหมด Not Car Auto: ไม่เจอรถ → ย้ายไป not_car", "success")
+                    
+                    # Update statistics
+                    self.stats['processed'] += 1
+                    self.stats['auto_not_car'] += 1
+                    self.root.after(0, self.update_stats)
+                    
+                    # Process next image
+                    self.current_index += 1
+                    self.root.after(100, self.process_next_image)
+                    
         except Exception as e:
             self.log(f"ข้อผิดพลาดในการประมวลผลไฟล์ {filename}: {e}", "error")
             # Skip to next image
@@ -1399,6 +1474,7 @@ class YOLOImageSimilaritySorter:
         # อัปเดตสถานะปุ่ม
         self.stop_button.config(state=tk.DISABLED)
         self.start_button.config(state=tk.NORMAL)
+        self.not_car_auto_button.config(state=tk.NORMAL)
         
     def finish_sorting(self):
         """เสร็จสิ้นกระบวนการคัดแยกรูปภาพ"""
@@ -1407,15 +1483,18 @@ class YOLOImageSimilaritySorter:
         # อัปเดตสถานะปุ่ม
         self.root.after(0, lambda: self.stop_button.config(state=tk.DISABLED))
         self.root.after(0, lambda: self.start_button.config(state=tk.NORMAL))
+        self.root.after(0, lambda: self.not_car_auto_button.config(state=tk.NORMAL))
         
         # แสดงสรุปผล
         summary = (
             f"\nสรุปผลการทำงาน:\n"
+            f"โหมด: {self.mode_var.get()}\n"
             f"จำนวนภาพทั้งหมด: {self.stats['total']} ไฟล์\n"
             f"จำนวนภาพที่ดำเนินการ: {self.stats['processed']} ไฟล์\n"
             f"จำนวนภาพที่จัดเป็น 'car': {self.stats['car']} ไฟล์\n"
             f"จำนวนภาพที่จัดเป็น 'not car' (จากผู้ใช้): {self.stats['not_car']} ไฟล์\n"
             f"จำนวนภาพที่จัดเป็น 'not car' (อัตโนมัติ): {self.stats['auto_not_car']} ไฟล์\n"
+            f"จำนวนภาพที่ข้าม: {self.stats['skipped']} ไฟล์\n"
             f"จำนวนภาพที่คล้ายกันที่ถูกย้าย: {self.stats['similar_moved']} ไฟล์\n"
         )
         
