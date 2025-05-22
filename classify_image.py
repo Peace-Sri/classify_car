@@ -715,7 +715,7 @@ class YOLOImageSimilaritySorter:
                 return
 
             # เริ่มหารูปที่คล้ายกันแบบ sliding window
-            window_size = 200
+            window_size = 500
             start_index = ref_index + 1  # เริ่มจากรูปถัดไป
             
             while start_index < len(self.image_files):
@@ -793,11 +793,17 @@ class YOLOImageSimilaritySorter:
                             self.root.after(0, lambda f=filename, s=similarity_score: 
                                         self.log(f"    เจอรูปคล้าย: {f} (ความคล้าย: {s:.2%})", "success"))
 
+                    # เปลี่ยนเป็น:
                     except Exception as e:
-                        self.root.after(0, lambda e=e, path=img_path: 
-                                    self.log(f"ข้อผิดพลาดในการประมวลผลไฟล์ {os.path.basename(path)}: {e}", "error"))
+                        # ใช้ try-except เพื่อป้องกัน error จาก os.path.basename
+                        try:
+                            filename = os.path.basename(img_path)
+                        except:
+                            filename = "unknown file"
+                        
+                        error_msg = f"ข้อผิดพลาดในการประมวลผลไฟล์ {filename}: {str(e)}"
+                        self.root.after(0, lambda msg=error_msg: self.log(msg, "error"))
                         continue
-
                 # ตรวจสอบว่าเจอรูปคล้ายใน window นี้หรือไม่
                 if found_similar_in_window:
                     self.root.after(0, lambda s=start_index, e=end_index: 
@@ -818,6 +824,42 @@ class YOLOImageSimilaritySorter:
             self.root.after(0, lambda e=e: self.log(f"ข้อผิดพลาดในการค้นหารูปที่คล้ายกัน: {e}", "error"))
             self.current_index += 1
             self.root.after(0, self.process_next_image)
+    
+
+    def log(self, message, level="normal"):
+        """Add a message to the log area"""
+        try:
+            # ป้องกันการ recursion
+            if hasattr(self, '_logging_in_progress') and self._logging_in_progress:
+                return
+            
+            self._logging_in_progress = True
+            
+            self.log_text.config(state=tk.NORMAL)
+            
+            # Add timestamp before message
+            from datetime import datetime
+            timestamp = datetime.now().strftime("[%H:%M:%S] ")
+            self.log_text.insert(tk.END, timestamp, "info")
+            
+            # จำกัดความยาวของ message
+            if len(str(message)) > 1000:
+                message = str(message)[:1000] + "..."
+            
+            # Add message with appropriate color based on level
+            if level in ["info", "success", "warning", "error"]:
+                self.log_text.insert(tk.END, str(message) + "\n", level)
+            else:
+                self.log_text.insert(tk.END, str(message) + "\n")
+                
+            self.log_text.see(tk.END)
+            self.log_text.config(state=tk.DISABLED)
+            self.root.update_idletasks()  # ใช้ update_idletasks แทน update
+            
+        except Exception as e:
+            print(f"Error in log function: {e}")
+        finally:
+            self._logging_in_progress = False
 
     
     def show_decision_ui(self, ref_img_path, class_name, confidence, similar_images):
@@ -1017,7 +1059,7 @@ class YOLOImageSimilaritySorter:
                 unselect_btn = ttk.Button(
                     img_frame,
                     text="Unselect",
-                    command=lambda path=img_path, frame=img_frame: self.toggle_image_selection(path, frame),
+                    command=lambda path=os.path.basename(img_path), frame=img_frame: self.toggle_image_selection(path, frame),
                     style='Unselect.TButton'
                 )
                 unselect_btn.pack(pady=(0, 5))
@@ -1224,6 +1266,17 @@ class YOLOImageSimilaritySorter:
         # รีเซ็ตสถานะ drag
         parent_frame.is_dragging = False
         parent_frame.drag_start_widget = None
+    
+
+    def safe_basename(self, path):
+        """ฟังก์ชันสำหรับดึง basename อย่างปลอดภัย"""
+        try:
+            if path and isinstance(path, str):
+                return os.path.basename(path)
+            else:
+                return "unknown"
+        except:
+            return "unknown"
 
     def find_img_frame_from_widget(self, widget):
         """หา img_frame จาก widget ใดๆ ภายใน"""
