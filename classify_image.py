@@ -8,6 +8,7 @@ from tkinter import filedialog, messagebox, ttk
 from PIL import Image, ImageTk
 import threading
 from pathlib import Path
+import torch
 
 class DarkModeStyle:
     """คลาสสำหรับกำหนดสีและสไตล์ Dark Mode"""
@@ -460,7 +461,7 @@ class YOLOImageSimilaritySorter:
         # Load YOLOv8 model
         try:
             self.log("กำลังโหลดโมเดล YOLOv8...", "info")
-            self.model = YOLO('best-cls-v2.pt')
+            self.model = YOLO('best-cls-v2.pt', ).to('cuda' if torch.cuda.is_available() else 'cpu')
             self.log("โหลดโมเดลสำเร็จ", "success")
         except Exception as e:
             self.log(f"ข้อผิดพลาดในการโหลดโมเดล: {e}", "error")
