@@ -10,6 +10,9 @@ import threading
 from pathlib import Path
 import torch
 
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
+print(f"##############Device: {device}##############")
+
 class DarkModeStyle:
     """คลาสสำหรับกำหนดสีและสไตล์ Dark Mode"""
     # สีหลัก
@@ -461,7 +464,7 @@ class YOLOImageSimilaritySorter:
         # Load YOLOv8 model
         try:
             self.log("กำลังโหลดโมเดล YOLOv8...", "info")
-            self.model = YOLO('best-cls-v2.pt', ).to('cuda' if torch.cuda.is_available() else 'cpu')
+            self.model = YOLO('best-cls-v2.pt', ).to(device)
             self.log("โหลดโมเดลสำเร็จ", "success")
         except Exception as e:
             self.log(f"ข้อผิดพลาดในการโหลดโมเดล: {e}", "error")
