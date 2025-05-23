@@ -290,42 +290,45 @@ class YOLOImageSimilaritySorter:
         self.threshold_scale.pack(side=tk.LEFT, padx=(0, 5), fill=tk.X, expand=True)
         
         # =========== Statistics section ===========
+        # =========== Statistics section ===========
         stats_frame = ttk.Frame(main_frame, padding=self.style.PADDING, style='Card.TFrame')
         stats_frame.pack(fill=tk.X, pady=(0, self.style.PADDING))
-        
+
         # Statistics header
         stats_header = ttk.Label(stats_frame, text="สถิติการคัดแยก", style='TLabel')
         stats_header.pack(anchor=tk.W, pady=(0, 5))
-        
+
         # First statistics row
         stats_row1 = ttk.Frame(stats_frame, style='TFrame')
         stats_row1.pack(fill=tk.X)
-        
+
         # Create variables for displaying each statistic
         self.total_var = tk.StringVar(value="รูปภาพทั้งหมด: 0")
         self.processed_var = tk.StringVar(value="ดำเนินการแล้ว: 0 (0%)")
         self.car_var = tk.StringVar(value="Car: 0")
         self.not_car_var = tk.StringVar(value="Not Car (ผู้ใช้): 0")
+        self.person_var = tk.StringVar(value="Person: 0")  # เพิ่มบรรทัดนี้
         self.auto_not_car_var = tk.StringVar(value="Not Car (อัตโนมัติ): 0")
-        self.skipped_var = tk.StringVar(value="ข้าม: 0")  # เพิ่มตัวแปรสถิติ skip
+        self.skipped_var = tk.StringVar(value="ข้าม: 0")
         self.similar_moved_var = tk.StringVar(value="รูปที่คล้ายที่ย้ายแล้ว: 0")
-        
+
         # Display statistics in a grid layout
         ttk.Label(stats_row1, textvariable=self.total_var, style='Stats.TLabel').pack(side=tk.LEFT, expand=True, fill=tk.X, padx=1)
         ttk.Label(stats_row1, textvariable=self.processed_var, style='Stats.TLabel').pack(side=tk.LEFT, expand=True, fill=tk.X, padx=1)
-        
+
         # Second statistics row
         stats_row2 = ttk.Frame(stats_frame, style='TFrame')
         stats_row2.pack(fill=tk.X, pady=(1, 0))
-        
+
         ttk.Label(stats_row2, textvariable=self.car_var, style='Stats.TLabel').pack(side=tk.LEFT, expand=True, fill=tk.X, padx=1)
         ttk.Label(stats_row2, textvariable=self.not_car_var, style='Stats.TLabel').pack(side=tk.LEFT, expand=True, fill=tk.X, padx=1)
+        ttk.Label(stats_row2, textvariable=self.person_var, style='Stats.TLabel').pack(side=tk.LEFT, expand=True, fill=tk.X, padx=1)  # เพิ่มบรรทัดนี้
         ttk.Label(stats_row2, textvariable=self.auto_not_car_var, style='Stats.TLabel').pack(side=tk.LEFT, expand=True, fill=tk.X, padx=1)
-        
+
         # Third statistics row
         stats_row3 = ttk.Frame(stats_frame, style='TFrame')
         stats_row3.pack(fill=tk.X, pady=(1, 0))
-        
+
         ttk.Label(stats_row3, textvariable=self.skipped_var, style='Stats.TLabel').pack(side=tk.LEFT, expand=True, fill=tk.X, padx=1)
         ttk.Label(stats_row3, textvariable=self.similar_moved_var, style='Stats.TLabel').pack(side=tk.LEFT, expand=True, fill=tk.X, padx=1)
         
@@ -465,6 +468,7 @@ class YOLOImageSimilaritySorter:
         self.processed_var.set(f"ดำเนินการแล้ว: {self.stats['processed']} ({progress_percent:.1f}%)")
         self.car_var.set(f"Car: {self.stats['car']}")
         self.not_car_var.set(f"Not Car (ผู้ใช้): {self.stats['not_car']}")
+        self.person_var.set(f"Person: {self.stats['person']}")
         self.auto_not_car_var.set(f"Not Car (อัตโนมัติ): {self.stats['auto_not_car']}")
         self.skipped_var.set(f"ข้าม: {self.stats['skipped']}")
         self.similar_moved_var.set(f"รูปที่คล้ายที่ย้ายแล้ว: {self.stats['similar_moved']}")
@@ -486,7 +490,8 @@ class YOLOImageSimilaritySorter:
         # Create target folders
         self.target_folders = {
             'car': os.path.join(self.folder_path, 'car'),
-            'not_car': os.path.join(self.folder_path, 'not_car')
+            'not_car': os.path.join(self.folder_path, 'not_car'),
+            'person': os.path.join(self.folder_path, 'person')
         }
         
         for folder in self.target_folders.values():
@@ -534,9 +539,10 @@ class YOLOImageSimilaritySorter:
             'processed': 0,
             'car': 0,
             'not_car': 0,
+            'person': 0,
             'auto_not_car': 0,
             'similar_moved': 0,
-            'skipped': 0  # เพิ่มบรรทัดนี้
+            'skipped': 0
         }
         self.root.after(0, self.update_stats)
         
@@ -951,6 +957,16 @@ class YOLOImageSimilaritySorter:
                 padding=(20, 10)
             )
             not_car_btn.pack(fill=tk.X, pady=5)
+
+
+            person_btn = ttk.Button(
+                buttons_frame, 
+                text="PERSON (p)", 
+                command=lambda: self.on_category_decision(decision_window, ref_img_path, 'person'),
+                style='Accent.TButton',  # หรือสร้าง style ใหม่ถ้าต้องการ
+                padding=(20, 10)
+            )
+            person_btn.pack(fill=tk.X, pady=5)
             
             # ปุ่ม Skip
             skip_btn = ttk.Button(
@@ -1403,6 +1419,8 @@ class YOLOImageSimilaritySorter:
             self.on_category_decision(window, ref_img_path, 'car')
         elif key == 'n':
             self.on_category_decision(window, ref_img_path, 'not_car')
+        elif key == 'p':  # เพิ่มบรรทัดนี้
+            self.on_category_decision(window, ref_img_path, 'person')
         elif key == 's':
             self.on_category_decision(window, ref_img_path, 'skip')
     
@@ -1426,6 +1444,8 @@ class YOLOImageSimilaritySorter:
             # อัปเดตสถิติตามหมวดหมู่ที่เลือก
             if category == 'car':
                 self.stats['car'] += 1
+            elif category == 'person':  # เพิ่มเงื่อนไขนี้
+                self.stats['person'] += 1
             else:  # not_car
                 self.stats['not_car'] += 1
                 
@@ -1437,7 +1457,7 @@ class YOLOImageSimilaritySorter:
             error_count = 0
             
             # กำหนดโฟลเดอร์ตรงข้าม
-            opposite_category = 'not_car' if category == 'car' else 'car'
+            opposite_category = 'not_car' if category in ['car', 'person'] else 'car'
             
             for img_path, _ in self.similar_images:
                 # ข้ามตัวเอง
@@ -1545,6 +1565,7 @@ class YOLOImageSimilaritySorter:
             f"จำนวนภาพทั้งหมด: {self.stats['total']} ไฟล์\n"
             f"จำนวนภาพที่ดำเนินการ: {self.stats['processed']} ไฟล์\n"
             f"จำนวนภาพที่จัดเป็น 'car': {self.stats['car']} ไฟล์\n"
+            f"จำนวนภาพที่จัดเป็น 'person': {self.stats['person']} ไฟล์\n"
             f"จำนวนภาพที่จัดเป็น 'not car' (จากผู้ใช้): {self.stats['not_car']} ไฟล์\n"
             f"จำนวนภาพที่จัดเป็น 'not car' (อัตโนมัติ): {self.stats['auto_not_car']} ไฟล์\n"
             f"จำนวนภาพที่ข้าม: {self.stats['skipped']} ไฟล์\n"
