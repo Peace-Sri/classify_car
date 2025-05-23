@@ -290,7 +290,6 @@ class YOLOImageSimilaritySorter:
         self.threshold_scale.pack(side=tk.LEFT, padx=(0, 5), fill=tk.X, expand=True)
         
         # =========== Statistics section ===========
-        # =========== Statistics section ===========
         stats_frame = ttk.Frame(main_frame, padding=self.style.PADDING, style='Card.TFrame')
         stats_frame.pack(fill=tk.X, pady=(0, self.style.PADDING))
 
@@ -353,6 +352,10 @@ class YOLOImageSimilaritySorter:
         self.not_car_auto_button = ttk.Button(control_frame, text="Not Car Auto", 
                                             command=self.start_not_car_auto_sorting, state=tk.DISABLED, style='Car.TButton')
         self.not_car_auto_button.pack(side=tk.LEFT, padx=(0, 5))
+
+        self.car_auto_button = ttk.Button(control_frame, text="Car Auto", 
+                                        command=self.start_car_auto_sorting, state=tk.DISABLED, style='NotCar.TButton')
+        self.car_auto_button.pack(side=tk.LEFT, padx=(0, 5))
         
         # ปุ่มหยุด
         self.stop_button = ttk.Button(control_frame, text="หยุด", 
@@ -407,6 +410,13 @@ class YOLOImageSimilaritySorter:
         self.log("เริ่มโหมด Not Car Auto", "success")
         self.start_sorting()
     
+    def start_car_auto_sorting(self):
+        """เริ่มการคัดแยกแบบ Car Auto"""
+        self.mode = "car_auto"
+        self.mode_var.set("โหมด: Car Auto")
+        self.log("เริ่มโหมด Car Auto", "success")
+        self.start_sorting()
+    
     def decrease_threshold(self):
         """ลดค่า threshold ลง 0.05"""
         new_threshold = max(0.1, self.threshold - 0.05)
@@ -435,6 +445,7 @@ class YOLOImageSimilaritySorter:
             # เปิดใช้งานปุ่มทั้งสอง
             self.start_button.config(state=tk.NORMAL)
             self.not_car_auto_button.config(state=tk.NORMAL)
+            self.car_auto_button.config(state=tk.NORMAL)
             self.log(f"เลือกโฟลเดอร์: {folder_path}", "info")
             
     def log(self, message, level="normal"):
@@ -491,7 +502,8 @@ class YOLOImageSimilaritySorter:
         self.target_folders = {
             'car': os.path.join(self.folder_path, 'car'),
             'not_car': os.path.join(self.folder_path, 'not_car'),
-            'person': os.path.join(self.folder_path, 'person')
+            'person': os.path.join(self.folder_path, 'person'),
+            'car_auto': os.path.join(self.folder_path, 'car_auto')
         }
         
         for folder in self.target_folders.values():
@@ -500,6 +512,7 @@ class YOLOImageSimilaritySorter:
         # Lock both start buttons to prevent multiple starts
         self.start_button.config(state=tk.DISABLED)
         self.not_car_auto_button.config(state=tk.DISABLED)
+        self.car_auto_button.config(state=tk.DISABLED)
         self.stop_button.config(state=tk.NORMAL)
             
         # Start processing in a separate thread
@@ -518,6 +531,7 @@ class YOLOImageSimilaritySorter:
             self.is_running = False
             self.root.after(0, lambda: self.start_button.config(state=tk.NORMAL))
             self.root.after(0, lambda: self.not_car_auto_button.config(state=tk.NORMAL))
+            self.root.after(0, lambda: self.car_auto_button.config(state=tk.NORMAL))
             self.root.after(0, lambda: self.stop_button.config(state=tk.DISABLED))
             return
             
@@ -648,6 +662,31 @@ class YOLOImageSimilaritySorter:
                     # Process next image
                     self.current_index += 1
                     self.root.after(100, self.process_next_image)
+
+            elif self.mode == "car_auto":
+                # โหมด Car Auto
+                if is_target_class and confidence > 0.9999:
+                    # ถ้าเจอรถและ confidence = 1.0 → ย้ายไป car_auto
+                    target_path = os.path.join(self.target_folders['car_auto'], filename)
+                    shutil.move(img_path, target_path)
+                    self.log(f"  โหมด Car Auto: เจอรถ conf=1.0 → ย้ายไป car_auto", "success")
+                    
+                    # Update statistics
+                    self.stats['processed'] += 1
+                    self.stats['auto_not_car'] += 1  # ใช้ตัวแปรเดิม
+                    self.root.after(0, self.update_stats)
+                else:
+                    # ถ้าไม่เจอรถ หรือ confidence < 1.0 → Skip
+                    self.log(f"  โหมด Car Auto: ไม่เจอรถ หรือ conf<1.0 → Skip", "warning")
+                    
+                    # Update statistics
+                    self.stats['processed'] += 1
+                    self.stats['skipped'] += 1
+                    self.root.after(0, self.update_stats)
+                
+                # Process next image
+                self.current_index += 1
+                self.root.after(100, self.process_next_image)
                     
         except Exception as e:
             self.log(f"ข้อผิดพลาดในการประมวลผลไฟล์ {filename}: {e}", "error")
@@ -1548,6 +1587,7 @@ class YOLOImageSimilaritySorter:
         self.stop_button.config(state=tk.DISABLED)
         self.start_button.config(state=tk.NORMAL)
         self.not_car_auto_button.config(state=tk.NORMAL)
+        self.car_auto_button.config(state=tk.NORMAL)
         
     def finish_sorting(self):
         """เสร็จสิ้นกระบวนการคัดแยกรูปภาพ"""
@@ -1557,6 +1597,7 @@ class YOLOImageSimilaritySorter:
         self.root.after(0, lambda: self.stop_button.config(state=tk.DISABLED))
         self.root.after(0, lambda: self.start_button.config(state=tk.NORMAL))
         self.root.after(0, lambda: self.not_car_auto_button.config(state=tk.NORMAL))
+        self.root.after(0, lambda: self.car_auto_button.config(state=tk.NORMAL))
         
         # แสดงสรุปผล
         summary = (
